@@ -41,8 +41,23 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  reviews  Review[]
-  orders   Order[]
+  reviews       Review[]
+  orders        Order[]
+  refreshTokens RefreshToken[]
+}
+
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
 }
 
 model Category {
@@ -60,10 +75,11 @@ model Product {
   id          Int      @id @default(autoincrement())
   name        String
   description String?
-  price       Decimal  @db.Decimal(10, 2)
+  price       Decimal  @db.Decimal(12, 2)
   stock       Int      @default(0)
   imageUrl    String?
   categoryId  Int
+  isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -74,6 +90,7 @@ model Product {
   @@index([categoryId])
   @@index([name])
   @@index([price])
+  @@index([isActive])
 }
 
 model Review {
@@ -96,7 +113,7 @@ model Review {
 model Order {
   id          Int         @id @default(autoincrement())
   userId      Int
-  totalAmount Decimal     @db.Decimal(10, 2)
+  totalAmount Decimal     @db.Decimal(12, 2)
   status      OrderStatus @default(PENDING)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -115,10 +132,10 @@ model OrderItem {
   orderId   Int
   productId Int
   quantity  Int
-  price     Decimal @db.Decimal(10, 2)
+  price     Decimal @db.Decimal(12, 2)
 
   order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id])
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   @@unique([orderId, productId])
   @@index([productId])
@@ -129,10 +146,12 @@ model Payment {
   orderId       Int             @unique
   provider      PaymentProvider
   transactionId String?         @unique
-  amount        Decimal         @db.Decimal(10, 2)
+  amount        Decimal         @db.Decimal(12, 2)
   status        PaymentStatus   @default(PENDING)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
   order Order @relation(fields: [orderId], references: [id])
+
+  @@index([status])
 }
