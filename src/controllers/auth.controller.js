@@ -3,6 +3,7 @@ const prisma = require("../config/database");
 const {
   generateAccessToken,
   generateRefreshToken,
+  verifyRefreshToken,
 } = require("../utils/jwt.utils");
 
 const register = async (req, res, next) => {
@@ -125,4 +126,87 @@ const getMe = async (req, res, next) => {
   }
 };
 
-module.exports = { register, login, getMe };
+const refresh = async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body; // validated by Zod middleware
+
+    // 1. Verify the token's signature and expiry
+    let decoded;
+    try {
+      decoded = verifyRefreshToken(refreshToken);
+    } catch (error) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired refresh token",
+      });
+    }
+
+    // 2. Confirm it still exists in the DB and hasn't been revoked
+    const storedToken = await prisma.refreshToken.findUnique({
+      where: { token: refreshToken },
+    });
+
+    if (!storedToken || storedToken.revokedAt || storedToken.expiresAt < new Date()) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired refresh token",
+      });
+    }
+
+    // 3. Rotate: revoke the old refresh token, issue a new pair
+    const payload = { userId: decoded.userId, role: decoded.role };
+    const newAccessToken = generateAccessToken(payload);
+    const newRefreshToken = generateRefreshToken(payload);
+
+    const expiresAt = new Date();
+    expiresAt.setDate(
+      expiresAt.getDate() +
+        parseInt(process.env.JWT_REFRESH_EXPIRES_IN_DAYS || "7", 10)
+    );
+
+    await prisma.$transaction([
+      prisma.refreshToken.update({
+        where: { id: storedToken.id },
+        data: { revokedAt: new Date() },
+      }),
+      prisma.refreshToken.create({
+        data: {
+          token: newRefreshToken,
+          userId: decoded.userId,
+          expiresAt,
+        },
+      }),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const logout = async (req, res, next) => {
+  try {
+    const { refreshToken } = req.body; // validated by Zod middleware
+
+    // Revoke if it exists; don't error out if it's already gone — logout should always succeed.
+    await prisma.refreshToken.updateMany({
+      where: { token: refreshToken, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Logged out successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { register, login, getMe, refresh, logout };

@@ -24,7 +24,6 @@ const registerSchema = z.object({
   }),
 });
 
-
 const loginSchema = z.object({
   body: z.object({
     email: z
@@ -32,11 +31,19 @@ const loginSchema = z.object({
       .trim()
       .toLowerCase()
       .email("Invalid email address"),
- 
+
     password: z
       .string({ required_error: "Password is required" })
       .min(1, "Password is required"),
   }),
 });
- 
-module.exports = { registerSchema, loginSchema };
+
+const refreshTokenSchema = z.object({
+  body: z.object({
+    refreshToken: z
+      .string({ required_error: "Refresh token is required" })
+      .min(1, "Refresh token is required"),
+  }),
+});
+
+module.exports = { registerSchema, loginSchema, refreshTokenSchema };
