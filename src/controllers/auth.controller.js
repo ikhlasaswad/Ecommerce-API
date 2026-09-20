@@ -1,10 +1,12 @@
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 const prisma = require("../config/database");
 const {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
 } = require("../utils/jwt.utils");
+const { sendPasswordResetEmail } = require("../utils/email.utils");
 
 const register = async (req, res, next) => {
   try {
@@ -47,8 +49,6 @@ const login = async (req, res, next) => {
 
     const user = await prisma.user.findUnique({ where: { email } });
 
-    // Same generic message whether the email doesn't exist or the password is wrong —
-    // avoids leaking which emails are registered.
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -104,7 +104,6 @@ const login = async (req, res, next) => {
 
 const getMe = async (req, res, next) => {
   try {
-    // req.user comes from the authenticate middleware (decoded JWT payload)
     const user = await prisma.user.findUnique({
       where: { id: req.user.userId },
       select: { id: true, name: true, email: true, role: true, createdAt: true },
@@ -128,9 +127,8 @@ const getMe = async (req, res, next) => {
 
 const refresh = async (req, res, next) => {
   try {
-    const { refreshToken } = req.body; // validated by Zod middleware
+    const { refreshToken } = req.body;
 
-    // 1. Verify the token's signature and expiry
     let decoded;
     try {
       decoded = verifyRefreshToken(refreshToken);
@@ -141,7 +139,6 @@ const refresh = async (req, res, next) => {
       });
     }
 
-    // 2. Confirm it still exists in the DB and hasn't been revoked
     const storedToken = await prisma.refreshToken.findUnique({
       where: { token: refreshToken },
     });
@@ -153,7 +150,6 @@ const refresh = async (req, res, next) => {
       });
     }
 
-    // 3. Rotate: revoke the old refresh token, issue a new pair
     const payload = { userId: decoded.userId, role: decoded.role };
     const newAccessToken = generateAccessToken(payload);
     const newRefreshToken = generateRefreshToken(payload);
@@ -192,9 +188,8 @@ const refresh = async (req, res, next) => {
 
 const logout = async (req, res, next) => {
   try {
-    const { refreshToken } = req.body; // validated by Zod middleware
+    const { refreshToken } = req.body;
 
-    // Revoke if it exists; don't error out if it's already gone — logout should always succeed.
     await prisma.refreshToken.updateMany({
       where: { token: refreshToken, revokedAt: null },
       data: { revokedAt: new Date() },
@@ -209,4 +204,152 @@ const logout = async (req, res, next) => {
   }
 };
 
-module.exports = { register, login, getMe, refresh, logout };
+const changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body; // validated by Zod middleware
+    const userId = req.user.userId; // from authenticate middleware
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const isCurrentPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.password
+    );
+
+    if (!isCurrentPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: "Current password is incorrect",
+      });
+    }
+
+    const hashedNewPassword = await bcrypt.hash(newPassword, 12);
+
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: userId },
+        data: { password: hashedNewPassword },
+      }),
+      // Security: revoke every existing refresh token so any other logged-in
+      // session (other device/browser) is forced to log in again.
+      prisma.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: "Password changed successfully. Please log in again.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body; // validated + normalized by Zod middleware
+
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    // Always return the same generic response, whether or not the email
+    // exists — otherwise this endpoint becomes an email-enumeration tool.
+    const genericResponse = {
+      success: true,
+      message: "If that email is registered, a reset link has been sent.",
+    };
+
+    if (!user) {
+      return res.status(200).json(genericResponse);
+    }
+
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+
+    await prisma.passwordResetToken.create({
+      data: {
+        tokenHash,
+        userId: user.id,
+        expiresAt,
+      },
+    });
+
+    const resetLink = `${process.env.FRONTEND_URL || "http://localhost:3000"}/reset-password?token=${rawToken}`;
+
+    await sendPasswordResetEmail(user.email, resetLink);
+
+    return res.status(200).json(genericResponse);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const resetPassword = async (req, res, next) => {
+  try {
+    const { token, newPassword } = req.body; // validated by Zod middleware
+
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    const resetToken = await prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+    });
+
+    if (
+      !resetToken ||
+      resetToken.usedAt ||
+      resetToken.expiresAt < new Date()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired reset token",
+      });
+    }
+
+    const hashedNewPassword = await bcrypt.hash(newPassword, 12);
+
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: resetToken.userId },
+        data: { password: hashedNewPassword },
+      }),
+      prisma.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { usedAt: new Date() },
+      }),
+      // Force re-login everywhere after a password reset too.
+      prisma.refreshToken.updateMany({
+        where: { userId: resetToken.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: "Password reset successfully. Please log in with your new password.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  register,
+  login,
+  getMe,
+  refresh,
+  logout,
+  changePassword,
+  forgotPassword,
+  resetPassword,
+};
