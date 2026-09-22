@@ -3,6 +3,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 const authRoutes = require("./routes/auth.routes");
+const categoryRoutes = require("./routes/category.routes");
 const { errorHandler } = require("./middleware/errorHandler.middleware");
 const { notFound } = require("./middleware/notFound.middleware");
 
@@ -18,6 +19,7 @@ if (process.env.NODE_ENV === "development") {
 }
 
 app.use("/api/auth", authRoutes);
+app.use("/api/categories", categoryRoutes);
 
 app.get("/api/health", (req, res) => {
   res.status(200).json({
