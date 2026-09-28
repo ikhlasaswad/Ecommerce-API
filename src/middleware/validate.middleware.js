@@ -12,7 +12,15 @@ const validate = (schema) => (req, res, next) => {
 
     if (parsed.body) req.body = parsed.body;
     if (parsed.params) req.params = parsed.params;
-    if (parsed.query) req.query = parsed.query;
+    if (parsed.query) {
+      // Express 5: req.query is a getter-only property, so plain assignment is ignored.
+      Object.defineProperty(req, "query", {
+        value: parsed.query,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      });
+    }
 
     next();
   } catch (error) {
