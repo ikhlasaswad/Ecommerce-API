@@ -16,6 +16,17 @@ const errorHandler = (err, req, res, next) => {
     });
   }
 
+  // Multer upload errors (file too large, unexpected field, ...)
+  if (err.name === "MulterError") {
+    const message =
+      err.code === "LIMIT_FILE_SIZE"
+        ? "Image is too large (max 5MB)"
+        : err.code === "LIMIT_UNEXPECTED_FILE"
+        ? 'Unexpected file field — use the field name "image"'
+        : err.message;
+    return res.status(400).json({ success: false, message });
+  }
+
   const statusCode = err.statusCode || 500;
   const message =
     process.env.NODE_ENV === "production" && statusCode === 500

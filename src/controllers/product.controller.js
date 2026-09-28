@@ -1,3 +1,5 @@
+const path = require("path");
+const fs = require("fs/promises");
 const prisma = require("../config/database");
 
 const createProduct = async (req, res, next) => {
@@ -166,10 +168,65 @@ const deleteProduct = async (req, res, next) => {
   }
 };
 
+const removeFile = async (filePath) => {
+  try {
+    await fs.unlink(filePath);
+  } catch (error) {
+    // File already gone or never existed — nothing to clean up.
+  }
+};
+
+const uploadProductImage = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Image file is required (form-data field name: "image")',
+      });
+    }
+
+    const existing = await prisma.product.findFirst({
+      where: { id, isActive: true },
+    });
+
+    if (!existing) {
+      await removeFile(req.file.path); // multer already saved it, so clean up
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    const imageUrl = `/uploads/products/${req.file.filename}`;
+
+    const product = await prisma.product.update({
+      where: { id },
+      data: { imageUrl },
+    });
+
+    // Replace, don't accumulate: delete the previous local image if there was one.
+    if (existing.imageUrl && existing.imageUrl.startsWith("/uploads/products/")) {
+      await removeFile(path.join(process.cwd(), existing.imageUrl));
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Product image uploaded successfully",
+      data: product,
+    });
+  } catch (error) {
+    if (req.file) await removeFile(req.file.path);
+    next(error);
+  }
+};
+
 module.exports = {
   createProduct,
   getAllProducts,
   getProductById,
   updateProduct,
   deleteProduct,
+  uploadProductImage,
 };
