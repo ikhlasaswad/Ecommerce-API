@@ -7,6 +7,7 @@ const authRoutes = require("./routes/auth.routes");
 const categoryRoutes = require("./routes/category.routes");
 const productRoutes = require("./routes/product.routes");
 const reviewRoutes = require("./routes/review.routes");
+const orderRoutes = require("./routes/order.routes");
 const { errorHandler } = require("./middleware/errorHandler.middleware");
 const { notFound } = require("./middleware/notFound.middleware");
 
@@ -26,7 +27,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/reviews", reviewRoutes);
-app.use("/api", reviewRoutes);
+app.use("/api/orders", orderRoutes);
 
 app.get("/api/health", (req, res) => {
   res.status(200).json({
