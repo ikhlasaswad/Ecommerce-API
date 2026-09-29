@@ -12,6 +12,14 @@ const { authenticate } = require("../middleware/authenticate.middleware");
 const { authorize } = require("../middleware/authorize.middleware");
 const { uploadImage } = require("../middleware/upload.middleware");
 const {
+  createReview,
+  getProductReviews,
+} = require("../controllers/review.controller");
+const {
+  createReviewSchema,
+  productIdParamSchema: reviewProductIdParamSchema,
+} = require("../validations/review.validation");
+const {
   createProductSchema,
   updateProductSchema,
   productIdParamSchema,
@@ -54,6 +62,19 @@ router.post(
   validate(productIdParamSchema),
   uploadImage,
   uploadProductImage
+);
+
+// Reviews nested under a product
+router.get(
+  "/:productId/reviews",
+  validate(reviewProductIdParamSchema),
+  getProductReviews
+);
+router.post(
+  "/:productId/reviews",
+  authenticate,
+  validate(createReviewSchema),
+  createReview
 );
 
 module.exports = router;

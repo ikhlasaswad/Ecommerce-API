@@ -6,6 +6,7 @@ const morgan = require("morgan");
 const authRoutes = require("./routes/auth.routes");
 const categoryRoutes = require("./routes/category.routes");
 const productRoutes = require("./routes/product.routes");
+const reviewRoutes = require("./routes/review.routes");
 const { errorHandler } = require("./middleware/errorHandler.middleware");
 const { notFound } = require("./middleware/notFound.middleware");
 
@@ -24,6 +25,8 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use("/api/auth", authRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/reviews", reviewRoutes);
+app.use("/api", reviewRoutes);
 
 app.get("/api/health", (req, res) => {
   res.status(200).json({
