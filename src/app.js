@@ -9,6 +9,7 @@ const productRoutes = require("./routes/product.routes");
 const reviewRoutes = require("./routes/review.routes");
 const orderRoutes = require("./routes/order.routes");
 const paymentRoutes = require("./routes/payment.routes");
+const adminRoutes = require("./routes/admin.routes");
 const { handleStripeWebhook } = require("./controllers/payment.controller");
 const { errorHandler } = require("./middleware/errorHandler.middleware");
 const { notFound } = require("./middleware/notFound.middleware");
@@ -42,6 +43,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.get("/api/health", (req, res) => {
   res.status(200).json({
