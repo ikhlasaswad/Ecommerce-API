@@ -13,11 +13,24 @@ const adminRoutes = require("./routes/admin.routes");
 const { handleStripeWebhook } = require("./controllers/payment.controller");
 const { errorHandler } = require("./middleware/errorHandler.middleware");
 const { notFound } = require("./middleware/notFound.middleware");
+const { generalLimiter } = require("./middleware/rateLimiter.middleware");
 
 const app = express();
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } })); // lets a frontend on another origin load /uploads images
-app.use(cors());
+
+// CORS_ORIGINS: comma-separated list, e.g. "http://localhost:5173,https://myapp.com"
+// No value set → allow all origins (fine for local development only).
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",").map((origin) => origin.trim())
+  : null;
+
+app.use(
+  cors({
+    origin: allowedOrigins || true,
+    credentials: true,
+  })
+);
 
 // IMPORTANT: Stripe needs the raw, unparsed request body to verify its
 // signature, so this route is registered BEFORE express.json() below.
@@ -31,6 +44,7 @@ app.post(
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use("/api", generalLimiter); // doesn't apply to the webhook route above or to /uploads
 
 if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
