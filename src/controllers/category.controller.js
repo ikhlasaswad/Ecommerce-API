@@ -1,10 +1,13 @@
 const prisma = require("../config/database");
+const { invalidateCache } = require("../middleware/cache.middleware");
 
 const createCategory = async (req, res, next) => {
   try {
     const { name } = req.body; // validated by Zod middleware
 
     const category = await prisma.category.create({ data: { name } });
+
+    await invalidateCache("categories");
 
     return res.status(201).json({
       success: true,
@@ -77,6 +80,9 @@ const updateCategory = async (req, res, next) => {
       data: { name },
     });
 
+    await invalidateCache("categories");
+    await invalidateCache("products"); // product listings embed category.name
+
     return res.status(200).json({
       success: true,
       message: "Category updated successfully",
@@ -106,6 +112,8 @@ const deleteCategory = async (req, res, next) => {
     // A category with products can't be deleted (Product.categoryId has no onDelete: Cascade,
     // so Prisma's default Restrict will throw P2003 here) — give a clear message instead of a 500.
     await prisma.category.delete({ where: { id } });
+
+    await invalidateCache("categories");
 
     return res.status(200).json({
       success: true,

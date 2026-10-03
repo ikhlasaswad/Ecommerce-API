@@ -1,4 +1,5 @@
 const prisma = require("../config/database");
+const { invalidateCache } = require("../middleware/cache.middleware");
 
 const createReview = async (req, res, next) => {
   try {
@@ -21,6 +22,8 @@ const createReview = async (req, res, next) => {
       data: { rating, comment, userId, productId },
       include: { user: { select: { id: true, name: true } } },
     });
+
+    await invalidateCache("products"); // product detail embeds its reviews
 
     return res.status(201).json({
       success: true,
@@ -101,6 +104,8 @@ const updateReview = async (req, res, next) => {
       include: { user: { select: { id: true, name: true } } },
     });
 
+    await invalidateCache("products");
+
     return res.status(200).json({
       success: true,
       message: "Review updated successfully",
@@ -134,6 +139,8 @@ const deleteReview = async (req, res, next) => {
     }
 
     await prisma.review.delete({ where: { id } });
+
+    await invalidateCache("products");
 
     return res.status(200).json({
       success: true,

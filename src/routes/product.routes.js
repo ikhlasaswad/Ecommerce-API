@@ -11,6 +11,7 @@ const { validate } = require("../middleware/validate.middleware");
 const { authenticate } = require("../middleware/authenticate.middleware");
 const { authorize } = require("../middleware/authorize.middleware");
 const { uploadImage } = require("../middleware/upload.middleware");
+const { cache } = require("../middleware/cache.middleware");
 const {
   createReview,
   getProductReviews,
@@ -28,9 +29,9 @@ const {
 
 const router = express.Router();
 
-// Public
-router.get("/", validate(getProductsQuerySchema), getAllProducts);
-router.get("/:id", validate(productIdParamSchema), getProductById);
+// Public — cached for 60s, invalidated by cache("products") on any write below
+router.get("/", validate(getProductsQuerySchema), cache("products"), getAllProducts);
+router.get("/:id", validate(productIdParamSchema), cache("products"), getProductById);
 
 // Admin only
 router.post(

@@ -9,6 +9,7 @@ const {
 const { validate } = require("../middleware/validate.middleware");
 const { authenticate } = require("../middleware/authenticate.middleware");
 const { authorize } = require("../middleware/authorize.middleware");
+const { cache } = require("../middleware/cache.middleware");
 const {
   createCategorySchema,
   updateCategorySchema,
@@ -17,9 +18,9 @@ const {
 
 const router = express.Router();
 
-// Public
-router.get("/", getAllCategories);
-router.get("/:id", validate(categoryIdParamSchema), getCategoryById);
+// Public — cached for 60s, invalidated by cache("categories") on any write below
+router.get("/", cache("categories"), getAllCategories);
+router.get("/:id", validate(categoryIdParamSchema), cache("categories"), getCategoryById);
 
 // Admin only
 router.post(

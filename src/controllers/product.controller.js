@@ -1,6 +1,7 @@
 const path = require("path");
 const fs = require("fs/promises");
 const prisma = require("../config/database");
+const { invalidateCache } = require("../middleware/cache.middleware");
 
 const createProduct = async (req, res, next) => {
   try {
@@ -9,6 +10,8 @@ const createProduct = async (req, res, next) => {
     const product = await prisma.product.create({
       data: { name, description, price, stock, imageUrl, categoryId },
     });
+
+    await invalidateCache("products");
 
     return res.status(201).json({
       success: true,
@@ -118,6 +121,8 @@ const updateProduct = async (req, res, next) => {
       data: updates,
     });
 
+    await invalidateCache("products");
+
     return res.status(200).json({
       success: true,
       message: "Product updated successfully",
@@ -151,6 +156,8 @@ const deleteProduct = async (req, res, next) => {
       where: { id },
       data: { isActive: false },
     });
+
+    await invalidateCache("products");
 
     return res.status(200).json({
       success: true,
@@ -210,6 +217,8 @@ const uploadProductImage = async (req, res, next) => {
     if (existing.imageUrl && existing.imageUrl.startsWith("/uploads/products/")) {
       await removeFile(path.join(process.cwd(), existing.imageUrl));
     }
+
+    await invalidateCache("products");
 
     return res.status(200).json({
       success: true,
